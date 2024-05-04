@@ -14,4 +14,4 @@ GND -> GND\
 VCC -> 3.3V
 
 ## Development board setup
-[alt text](./epaper-stm32.jpeg)
+[alt text](./epaper-stm32.jpg)
