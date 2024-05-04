@@ -12,3 +12,6 @@ SPI2_SCK -> PB10\
 SPI2_MOSI -> PC1\
 GND -> GND\
 VCC -> 3.3V
+
+## Development board setup
+[alt text](./epaper-stm32.jpeg)
