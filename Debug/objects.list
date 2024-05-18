@@ -1,4 +1,5 @@
 "./Config/DEV_Config.o"
+"./Core/Src/cmdprocessor.o"
 "./Core/Src/main.o"
 "./Core/Src/stm32f4xx_hal_msp.o"
 "./Core/Src/stm32f4xx_it.o"

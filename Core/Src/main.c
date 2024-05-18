@@ -21,6 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <string.h>
 #include "EPD.h"
 /* USER CODE END Includes */
 
@@ -31,12 +32,23 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+enum cmd_table
+{
+	logo,
+	clear,
+	string,
+	write,
+	read,
+};
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+#define UART_PKT_LEN_MIN 8
+#define UART_PKT_LEN_MAX 264
+#define UART_TIMEOUT_1 1000
+#define UART_TIMEOUT_2 500
+#define HEADER_LEN 4
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -45,17 +57,16 @@ CRC_HandleTypeDef hcrc;
 SPI_HandleTypeDef hspi2;
 
 UART_HandleTypeDef huart2;
-DMA_HandleTypeDef hdma_usart2_rx;
-DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
-
+uint8_t rx_buff[272];
+uint8_t tx_buff[272];
+uint8_t mem[512];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_CRC_Init(void);
@@ -65,7 +76,154 @@ static void MX_CRC_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static int process_header(uint8_t *buff)
+{
+	if (buff[0]!='T' || buff[1]!='L')
+		return -1;
 
+	return 0;
+}
+
+static void crc_fill(uint32_t *crc_buff, uint32_t len, int is_tx)
+{
+	int i;
+	int j;
+	uint8_t *buff = NULL;
+	uint8_t rem;
+
+	buff = is_tx?tx_buff:rx_buff;
+
+	for (i=0,j=0;i<len/4;i++) {
+		crc_buff[i] = buff[j] << 24 |
+					  buff[j+1] << 16 |
+					  buff[j+2] << 8 |
+					  buff[j+3];
+		j+=4;
+	}
+	rem = len%4;
+	for (i=len-rem,j=3;i<len;i++,j--)
+		crc_buff[len/4] |= rx_buff[i] << 8*j;
+}
+
+static int do_crc(uint8_t is_tx)
+{
+	uint32_t crc;
+	uint32_t rx_crc;
+	uint32_t crc_offset;
+	uint32_t crc_buff[68] = {0};
+	uint8_t len;
+	uint8_t append = 0;
+
+	len = is_tx?tx_buff[3]:rx_buff[3];
+	crc_offset = len + HEADER_LEN;
+	crc_fill(crc_buff, crc_offset, is_tx);
+	if((crc_offset %4 ) != 0)
+		append = 1;
+	crc = HAL_CRC_Calculate(&hcrc, crc_buff, (crc_offset/4) + append);
+
+	if (is_tx) {
+		tx_buff[crc_offset + 3] = crc >> 24;
+		tx_buff[crc_offset + 2] = crc >> 16;
+		tx_buff[crc_offset + 1] = crc >> 8;
+		tx_buff[crc_offset ] = crc;
+		return 0;
+	}
+
+	rx_crc = rx_buff[crc_offset + 3] << 24 |
+			 rx_buff[crc_offset + 2] << 16 |
+			 rx_buff[crc_offset + 1] << 8 |
+			 rx_buff[crc_offset];
+
+	if (crc == rx_crc)
+		return 0;
+
+	return -1;
+}
+
+static int mem_write(uint8_t offset, uint8_t len)
+{
+	memcpy(mem + offset, &rx_buff[4], len);
+	return 0;
+}
+
+static void prepend_tx_header()
+{
+	tx_buff[0] = 'T';
+	tx_buff[1] = 'L';
+	tx_buff[2] = rx_buff[2];
+}
+
+static int mem_read(uint8_t offset, uint8_t len)
+{
+	tx_buff[3] = len;
+	memcpy(&tx_buff[4], mem + offset, len);
+	prepend_tx_header();
+	do_crc(0);
+	HAL_UART_Transmit(&huart2, tx_buff, 8+len, 1000);
+	return 0;
+}
+
+static void send_ack()
+{
+	prepend_tx_header();
+	tx_buff[3] = 2;
+	tx_buff[4] = 'O';
+	tx_buff[5] = 'K';
+	do_crc(1);
+	HAL_UART_Transmit(&huart2, tx_buff, 10, 1000);
+}
+
+static void send_nack()
+{
+	prepend_tx_header();
+	tx_buff[3] = 3;
+	tx_buff[4] = 'N';
+	tx_buff[4] = 'O';
+	tx_buff[5] = 'K';
+	do_crc(1);
+	HAL_UART_Transmit(&huart2, tx_buff, 11, 1000);
+}
+
+static int process_cmd(uint8_t *buff)
+{
+	uint8_t cmd_id = buff[2];
+	uint8_t str[] = {"tweaklogic"};
+
+	if (do_crc(0) != 0) {
+		send_nack();
+		return 0;
+	}
+
+	switch (cmd_id) {
+		case logo:
+			EPD(str, 10, 52, 5);
+			send_ack();
+		break;
+		case clear:
+			EPD_Clear();
+			send_ack();
+		break;
+		case string:
+			rx_buff[rx_buff[3] + 4] = '\0';
+			EPD(&rx_buff[4], 0, 0, 3);
+			send_ack();
+		break;
+		case write:
+			if (mem_write(0, rx_buff[4]) != 0)
+				send_nack();
+			else
+				send_ack();
+		break;
+		case read:
+			if (mem_read(0, rx_buff[4]) != 0)
+				send_nack();
+		break;
+		default:
+			send_nack();
+	};
+
+	return 0;
+}
 /* USER CODE END 0 */
 
 /**
@@ -76,6 +234,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+  uint8_t ret;
+  uint16_t rx_len;
 
   /* USER CODE END 1 */
 
@@ -97,12 +257,11 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
   MX_USART2_UART_Init();
   MX_SPI2_Init();
   MX_CRC_Init();
   /* USER CODE BEGIN 2 */
-  EPD();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -112,6 +271,14 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	ret = HAL_UARTEx_ReceiveToIdle(&huart2, rx_buff, sizeof(rx_buff), &rx_len, UART_TIMEOUT_1);
+	if (ret != HAL_OK)
+		continue;
+	if (rx_len < UART_PKT_LEN_MIN || rx_len > UART_PKT_LEN_MAX)
+		continue;
+	if (process_header(rx_buff) != 0)
+		continue;
+	process_cmd(rx_buff);
   }
   /* USER CODE END 3 */
 }
@@ -257,25 +424,6 @@ static void MX_USART2_UART_Init(void)
   /* USER CODE BEGIN USART2_Init 2 */
 
   /* USER CODE END USART2_Init 2 */
-
-}
-
-/**
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void)
-{
-
-  /* DMA controller clock enable */
-  __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Stream5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream5_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream5_IRQn);
-  /* DMA1_Stream6_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream6_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Stream6_IRQn);
 
 }
 

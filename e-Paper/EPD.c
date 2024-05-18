@@ -31,9 +31,61 @@
   ******************************************************************************
   */
 #include <EPD.h>
+#include <fonts.h>
 #include "EPD_2in9_V2.h"
 
-int EPD(void)
+int EPD(uint8_t *str, uint16_t x, uint16_t y, uint8_t font_num)
+{
+    sFONT font;
+    if(DEV_Module_Init()!=0) {
+        return -1;
+    }
+
+    EPD_2IN9_V2_Init();
+    EPD_2IN9_V2_Clear();
+    DEV_Delay_ms(1000);
+
+    switch (font_num) {
+    case 1:
+    	font = Font8;
+    break;
+    case 2:
+    	font = Font12;
+    break;
+    case 3:
+    	font = Font16;
+    break;
+    case 4:
+    	font = Font20;
+    break;
+    case 5:
+    	font = Font24;
+    break;
+    default:
+    	font = Font16;
+    }
+
+    UBYTE *BlackImage;
+    UWORD Imagesize = ((EPD_2IN9_V2_WIDTH % 8 == 0)? (EPD_2IN9_V2_WIDTH / 8 ): (EPD_2IN9_V2_WIDTH / 8 + 1)) * EPD_2IN9_V2_HEIGHT;
+    if((BlackImage = (UBYTE *)malloc(Imagesize)) == NULL) {
+        return -1;
+    }
+    Paint_NewImage(BlackImage, EPD_2IN9_V2_WIDTH, EPD_2IN9_V2_HEIGHT, 90, WHITE);
+    Paint_Clear(WHITE);
+
+    EPD_2IN9_V2_Init_Fast();
+    Paint_NewImage(BlackImage, EPD_2IN9_V2_WIDTH, EPD_2IN9_V2_HEIGHT, 90, WHITE);
+    Paint_SetRotate(ROTATE_270);
+    Paint_SelectImage(BlackImage);
+    Paint_Clear(WHITE);
+    Paint_DrawString_EN(x, y, str, &font, WHITE, BLACK);
+    EPD_2IN9_V2_Display(BlackImage);
+    DEV_Delay_ms(3000);
+
+    return 0;
+}
+
+int EPD_Clear()
 {
     if(DEV_Module_Init()!=0) {
         return -1;
@@ -43,7 +95,6 @@ int EPD(void)
     EPD_2IN9_V2_Clear();
     DEV_Delay_ms(1000);
 
-    //Create a new image cache
     UBYTE *BlackImage;
     UWORD Imagesize = ((EPD_2IN9_V2_WIDTH % 8 == 0)? (EPD_2IN9_V2_WIDTH / 8 ): (EPD_2IN9_V2_WIDTH / 8 + 1)) * EPD_2IN9_V2_HEIGHT;
     if((BlackImage = (UBYTE *)malloc(Imagesize)) == NULL) {
@@ -52,36 +103,13 @@ int EPD(void)
     Paint_NewImage(BlackImage, EPD_2IN9_V2_WIDTH, EPD_2IN9_V2_HEIGHT, 90, WHITE);
     Paint_Clear(WHITE);
 
-    /* Display tweaklogic */
     EPD_2IN9_V2_Init_Fast();
     Paint_NewImage(BlackImage, EPD_2IN9_V2_WIDTH, EPD_2IN9_V2_HEIGHT, 90, WHITE);
     Paint_SetRotate(ROTATE_270);
     Paint_SelectImage(BlackImage);
     Paint_Clear(WHITE);
-    Paint_DrawString_EN(10, 52, "tweaklogic", &Font24, WHITE, BLACK);
     EPD_2IN9_V2_Display(BlackImage);
-    DEV_Delay_ms(3000);
 
-#if 0
-    Paint_NewImage(BlackImage, EPD_2IN9_V2_WIDTH, EPD_2IN9_V2_HEIGHT, 90, WHITE);
-    Paint_SelectImage(BlackImage);
-    Paint_Clear(WHITE);
-    Paint_DrawBitMap(gImage_2in9);
-    EPD_2IN9_V2_Display(BlackImage);
-    DEV_Delay_ms(3000);
-#endif
-
-#if 0
-    EPD_2IN9_V2_Init();
-    EPD_2IN9_V2_Clear();
-
-    EPD_2IN9_V2_Sleep();
-    free(BlackImage);
-    BlackImage = NULL;
-    DEV_Delay_ms(2000);//important, at least 2s
-
-    DEV_Module_Exit();
-#endif
     return 0;
 }
 

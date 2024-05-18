@@ -36,6 +36,7 @@
 #include "Debug.h"
 #include <stdlib.h>
 
-int EPD(void);
+int EPD(uint8_t *str, uint16_t x, uint16_t y, uint8_t font_num);
+int EPD_Clear();
 
 #endif

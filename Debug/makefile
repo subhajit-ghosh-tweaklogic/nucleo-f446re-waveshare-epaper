@@ -64,8 +64,8 @@ all: main-build
 main-build: nucleo-f446re-waveshare-epaper.elf secondary-outputs
 
 # Tool invocations
-nucleo-f446re-waveshare-epaper.elf nucleo-f446re-waveshare-epaper.map: $(OBJS) $(USER_OBJS) /home/subhajit/stm32-nucleo_projects/nucleo-f446re-waveshare-epaper/STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "nucleo-f446re-waveshare-epaper.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/home/subhajit/stm32-nucleo_projects/nucleo-f446re-waveshare-epaper/STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="nucleo-f446re-waveshare-epaper.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+nucleo-f446re-waveshare-epaper.elf nucleo-f446re-waveshare-epaper.map: $(OBJS) $(USER_OBJS) /home/subhajit/STM32CubeIDE/workspace_1.15.0/nucleo-f446re-waveshare-epaper/STM32F446RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "nucleo-f446re-waveshare-epaper.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/home/subhajit/STM32CubeIDE/workspace_1.15.0/nucleo-f446re-waveshare-epaper/STM32F446RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="nucleo-f446re-waveshare-epaper.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
